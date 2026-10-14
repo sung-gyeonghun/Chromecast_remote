@@ -19,6 +19,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.EditorInfo;
 import android.widget.*;
 import com.morluto.remocon.protocol.RemoteClient;
+import com.morluto.remocon.protocol.AppLaunch;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 
@@ -70,57 +71,90 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
         int flags=dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         if(android.os.Build.VERSION.SDK_INT>=27&&!dark)flags|=View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         getWindow().getDecorView().setSystemUiVisibility(flags);
-        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BG);
-        LinearLayout root = vertical(); root.setPadding(dp(24),dp(16),dp(24),dp(24)); scroll.addView(root);
-        scroll.setOnApplyWindowInsetsListener((v,insets) -> {
-            if(android.os.Build.VERSION.SDK_INT >= 30) {
-                android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
-                v.setPadding(bars.left,bars.top,bars.right,bars.bottom);
-            } else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
-            return insets;
+        LinearLayout root=vertical();root.setBackgroundColor(BG);root.setPadding(dp(18),dp(10),dp(18),dp(10));
+        root.setOnApplyWindowInsetsListener((v,insets)->{
+            int left,top,right,bottom;
+            if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());left=bars.left;top=bars.top;right=bars.right;bottom=bars.bottom;}
+            else{left=insets.getSystemWindowInsetLeft();top=insets.getSystemWindowInsetTop();right=insets.getSystemWindowInsetRight();bottom=insets.getSystemWindowInsetBottom();}
+            v.setPadding(dp(18)+left,dp(10)+top,dp(18)+right,dp(10)+bottom);return insets;
         });
-        LinearLayout titleRow = row();LinearLayout heading=vertical();
-        TextView eyebrow = label("YOUR TV, IN YOUR HAND",10,BLUE); eyebrow.setLetterSpacing(.14f);heading.addView(eyebrow);space(heading,6);
-        TextView title = label("리모콘",34,INK); title.setTypeface(null,Typeface.BOLD);heading.addView(title);space(heading,5);heading.addView(label("Chromecast 4세대 · Google TV",12,MUTED));
-        titleRow.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
-        LinearLayout tools=vertical();tools.setGravity(Gravity.CENTER);Button help = button("?",false); help.setContentDescription("사용 안내"); tools.addView(help,new LinearLayout.LayoutParams(dp(44),dp(44))); help.setOnClickListener(v -> showHelp());space(tools,5);
-        Switch mode=new Switch(this);mode.setText("다크");mode.setTextSize(11);mode.setTextColor(MUTED);mode.setChecked(dark);mode.setContentDescription("다크 모드 설정");mode.setSwitchPadding(dp(5));
-        mode.setThumbTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked},new int[]{}},new int[]{BLUE,Color.WHITE}));mode.setTrackTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked},new int[]{}},new int[]{Color.parseColor(dark?"#395D91":"#A7C4FF"),BORDER}));
-        tools.addView(mode,new LinearLayout.LayoutParams(dp(82),dp(44)));titleRow.addView(tools,new LinearLayout.LayoutParams(dp(88),-2));root.addView(titleRow);space(root,22);
+
+        LinearLayout header=row(),heading=vertical();
+        TextView eyebrow=fittedLabel("YOUR TV, IN YOUR HAND",9,11,BLUE);eyebrow.setLetterSpacing(.08f);
+        heading.addView(eyebrow,new LinearLayout.LayoutParams(-1,0,1));
+        TextView title=fittedLabel("리모콘",20,32,INK);title.setTypeface(null,Typeface.BOLD);heading.addView(title,new LinearLayout.LayoutParams(-1,0,2));
+        heading.addView(fittedLabel("Chromecast 4세대 · Google TV",10,12,MUTED),new LinearLayout.LayoutParams(-1,0,1));
+        header.addView(heading,new LinearLayout.LayoutParams(0,-1,1));
+        LinearLayout tools=vertical();tools.setGravity(Gravity.CENTER);
+        Button help=button("?",false);help.setContentDescription("사용 안내");tools.addView(help,new LinearLayout.LayoutParams(dp(44),0,1));help.setOnClickListener(v->showHelp());
+        Switch mode=new Switch(this);mode.setText("다크");mode.setTextSize(11);mode.setTextColor(MUTED);mode.setChecked(dark);mode.setContentDescription("다크 모드 설정");mode.setSwitchPadding(dp(4));
+        mode.setThumbTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked},new int[]{}},new int[]{BLUE,Color.WHITE}));
+        mode.setTrackTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked},new int[]{}},new int[]{Color.parseColor(dark?"#395D91":"#A7C4FF"),BORDER}));
+        tools.addView(mode,new LinearLayout.LayoutParams(dp(82),0,1));header.addView(tools,new LinearLayout.LayoutParams(dp(88),-1));section(root,header,14);
         mode.setOnCheckedChangeListener((b,value)->{dark=value;prefs.edit().putBoolean("dark",dark).apply();applyPalette();buildUi();});
-        LinearLayout card = vertical(); card.setPadding(dp(18),dp(18),dp(18),dp(18)); card.setBackground(shape(CARD,20));
-        badge = label("●  연결 대기",11,BLUE); card.addView(badge); space(card,10);
-        deviceName = label(name,19,INK); deviceName.setTypeface(null,Typeface.BOLD); card.addView(deviceName); space(card,8);
-        status = label("휴대폰과 Chromecast를 같은 Wi-Fi에 연결하세요.",13,MUTED); card.addView(status); space(card,14);
-        connectButton = button("기기 연결",true); card.addView(connectButton,new LinearLayout.LayoutParams(-1,dp(48))); connectButton.setOnClickListener(v -> chooseDevice()); root.addView(card); space(root,24);
-        Button keyboard=button("키보드로 검색어 입력",false);keyboard.setContentDescription("키보드 입력");controls.add(keyboard);keyboard.setOnClickListener(v->showKeyboard());root.addView(keyboard,new LinearLayout.LayoutParams(-1,dp(48)));space(root,18);
-        LinearLayout dpadSection = vertical(); dpadSection.setGravity(Gravity.CENTER);
-        TextView navTitle = label("탐색",12,MUTED); navTitle.setGravity(Gravity.CENTER); dpadSection.addView(navTitle); space(dpadSection,14);
-        LinearLayout dpad = vertical(); dpad.setPadding(dp(12),dp(12),dp(12),dp(12)); dpad.setBackground(shape(CARD,130));
-        for (int y=0;y<3;y++) {
+
+        LinearLayout card=row();card.setPadding(dp(12),dp(8),dp(12),dp(8));card.setBackground(shape(CARD,18));
+        LinearLayout details=vertical();
+        badge=fittedLabel("○  연결 대기",10,11,BLUE);details.addView(badge,new LinearLayout.LayoutParams(-1,0,1));
+        deviceName=fittedLabel(name,10,16,INK);deviceName.setTypeface(null,Typeface.BOLD);details.addView(deviceName,new LinearLayout.LayoutParams(-1,0,1.5f));
+        status=fittedLabel(previousStatus,10,12,MUTED);details.addView(status,new LinearLayout.LayoutParams(-1,0,1.5f));
+        card.addView(details,new LinearLayout.LayoutParams(0,-1,1));
+        connectButton=button("기기 연결",true);connectButton.setAutoSizeTextTypeUniformWithConfiguration(10,14,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+        LinearLayout.LayoutParams connectParams=new LinearLayout.LayoutParams(dp(88),-1);connectParams.leftMargin=dp(8);card.addView(connectButton,connectParams);connectButton.setOnClickListener(v->chooseDevice());section(root,card,16);
+
+        LinearLayout apps=row();
+        Button keyboard=button("키보드",false);keyboard.setContentDescription("키보드 입력");controls.add(keyboard);keyboard.setOnClickListener(v->showKeyboard());addShortcut(apps,keyboard);
+        addShortcut(apps,appButton("YouTube","YouTube 실행",com.morluto.remocon.R.drawable.ic_youtube,AppLaunch.YOUTUBE));
+        addShortcut(apps,appButton("Netflix","Netflix 실행",com.morluto.remocon.R.drawable.ic_netflix,AppLaunch.NETFLIX));section(root,apps,9);
+
+        FrameLayout padFrame=new FrameLayout(this);
+        LinearLayout dpad=vertical();dpad.setPadding(dp(6),dp(6),dp(6),dp(6));dpad.setBackground(shape(CARD,150));
+        for(int y=0;y<3;y++){
             LinearLayout r=row();
-            for (int x=0;x<3;x++) {
-                int key=0; String text="", desc="";
-                if(y==0&&x==1){key=19;text="↑";desc="위";} if(y==1&&x==0){key=21;text="←";desc="왼쪽";}
-                if(y==1&&x==1){key=23;text="OK";desc="확인";} if(y==1&&x==2){key=22;text="→";desc="오른쪽";} if(y==2&&x==1){key=20;text="↓";desc="아래";}
-                if(key==0){View empty=new View(this);r.addView(empty,new LinearLayout.LayoutParams(dp(72),dp(72)));}
-                else {Button b=keyButton(text,desc,key,y==1&&x==1);r.addView(b,new LinearLayout.LayoutParams(dp(72),dp(72)));}
-            } dpad.addView(r);
-        } dpadSection.addView(dpad,new LinearLayout.LayoutParams(dp(240),dp(240))); root.addView(dpadSection); space(root,24);
-        LinearLayout navigation=row(); addKey(navigation,"↶","뒤로",4); addKey(navigation,"⌂","홈",3); addKey(navigation,"▶Ⅱ","재생 / 일시정지",85); root.addView(navigation); space(root,18);
-        LinearLayout audio=row(); addKey(audio,"−","볼륨 줄이기",25); addKey(audio,"음소거","음소거",164); addKey(audio,"＋","볼륨 높이기",24); root.addView(audio); space(root,18);
-        Button power=keyButton("전원","전원 전환",26,false); root.addView(power,new LinearLayout.LayoutParams(-1,dp(50))); space(root,16);
-        TextView note=label("볼륨·전원은 TV의 HDMI-CEC 설정에 따라 달라집니다.",11,MUTED); note.setGravity(Gravity.CENTER); root.addView(note);
-        space(root,16); TextView footer=label("Wi-Fi로 직접 연결 · 계정 없이 사용",11,MUTED); footer.setGravity(Gravity.CENTER);root.addView(footer);
-        setContentView(scroll);renderStatus(previousStatus);
+            for(int x=0;x<3;x++){
+                int key=0;String text="",desc="";
+                if(y==0&&x==1){key=19;text="↑";desc="위";}if(y==1&&x==0){key=21;text="←";desc="왼쪽";}
+                if(y==1&&x==1){key=23;text="OK";desc="확인";}if(y==1&&x==2){key=22;text="→";desc="오른쪽";}if(y==2&&x==1){key=20;text="↓";desc="아래";}
+                View cell=key==0?new View(this):keyButton(text,desc,key,y==1&&x==1);
+                r.addView(cell,new LinearLayout.LayoutParams(0,-1,1));
+            }
+            dpad.addView(r,new LinearLayout.LayoutParams(-1,0,1));
+        }
+        padFrame.addView(dpad,new FrameLayout.LayoutParams(dp(220),dp(220),Gravity.CENTER));
+        padFrame.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+            int size=Math.max(0,Math.min(r-l,b-t)-dp(4));
+            FrameLayout.LayoutParams p=(FrameLayout.LayoutParams)dpad.getLayoutParams();
+            if(p.width!=size||p.height!=size){p.width=size;p.height=size;dpad.setLayoutParams(p);}
+        });section(root,padFrame,32);
+
+        LinearLayout navigation=row();addKey(navigation,"↶","뒤로",4);addKey(navigation,"⌂","홈",3);addKey(navigation,"▶Ⅱ","재생 / 일시정지",85);section(root,navigation,10);
+        LinearLayout audio=row();addKey(audio,"−","볼륨 줄이기",25);addKey(audio,"음소거","음소거",164);addKey(audio,"＋","볼륨 높이기",24);section(root,audio,10);
+        Button power=keyButton("전원","전원 전환",26,false);section(root,power,9);
+        setContentView(root);renderStatus(previousStatus);
+    }
+    private void section(LinearLayout root,View child,float weight){
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,0,weight);p.topMargin=dp(2);p.bottomMargin=dp(2);root.addView(child,p);
+    }
+    private TextView fittedLabel(String text,int min,int max,int color){
+        TextView t=label(text,max,color);t.setSingleLine(true);t.setEllipsize(android.text.TextUtils.TruncateAt.END);t.setGravity(Gravity.CENTER_VERTICAL);
+        t.setAutoSizeTextTypeUniformWithConfiguration(min,max,1,android.util.TypedValue.COMPLEX_UNIT_SP);return t;
+    }
+    private void addShortcut(LinearLayout row,Button button){
+        button.setAutoSizeTextTypeUniformWithConfiguration(10,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);button.setSingleLine(true);
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(3),0,dp(3),0);row.addView(button,p);
+    }
+    private Button appButton(String text,String description,int icon,String link){
+        Button b=button(text,false);b.setContentDescription(description);controls.add(b);
+        android.graphics.drawable.Drawable logo=getDrawable(icon);logo.setBounds(0,0,dp(18),dp(18));b.setCompoundDrawables(logo,null,null,null);b.setCompoundDrawablePadding(dp(4));
+        b.setOnClickListener(v->{if(!connected)return;if(remote.launchApp(link)){v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);Toast.makeText(this,text+" 실행 요청을 보냈어요.",Toast.LENGTH_SHORT).show();}else Toast.makeText(this,"TV가 앱 바로가기를 지원하지 않거나 연결되지 않았어요.",Toast.LENGTH_LONG).show();});return b;
     }
     private void addKey(LinearLayout row,String symbol,String desc,int key){
-        LinearLayout cell=vertical();cell.setGravity(Gravity.CENTER);Button b=keyButton(symbol,desc,key,false);
-        cell.addView(b,new LinearLayout.LayoutParams(-1,dp(52)));TextView t=label(desc,11,MUTED);t.setGravity(Gravity.CENTER);cell.addView(t);
-        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(4),0,dp(4),0);row.addView(cell,p);
+        Button b=keyButton(symbol.equals(desc)?desc:symbol+"\n"+desc,desc,key,false);
+        b.setMaxLines(2);b.setAutoSizeTextTypeUniformWithConfiguration(9,15,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(3),0,dp(3),0);row.addView(b,p);
     }
     private Button keyButton(String text,String description,int key,boolean accent){Button b=button(text,accent);b.setContentDescription(description);controls.add(b);b.setOnClickListener(v->{if(connected){v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);remote.sendKey(key);}});return b;}
-    private Button button(String text,boolean accent){Button b=new Button(this);b.setText(text);b.setTextSize(16);b.setAllCaps(false);b.setTextColor(accent?(dark?BG:Color.WHITE):INK);b.setTypeface(null,Typeface.BOLD);b.setBackground(new RippleDrawable(ColorStateList.valueOf(Color.argb(45,100,160,255)),shape(accent?BLUE:BUTTON,24),null));b.setMinHeight(0);b.setMinimumHeight(0);b.setMinWidth(0);b.setMinimumWidth(0);b.setPadding(dp(8),0,dp(8),0);return b;}
+    private Button button(String text,boolean accent){Button b=new Button(this);b.setText(text);b.setTextSize(16);b.setAutoSizeTextTypeUniformWithConfiguration(10,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);b.setAllCaps(false);b.setStateListAnimator(null);b.setTextColor(accent?(dark?BG:Color.WHITE):INK);b.setTypeface(null,Typeface.BOLD);b.setBackground(new RippleDrawable(ColorStateList.valueOf(Color.argb(45,100,160,255)),shape(accent?BLUE:BUTTON,24),null));b.setMinHeight(0);b.setMinimumHeight(0);b.setMinWidth(0);b.setMinimumWidth(0);b.setPadding(dp(8),0,dp(8),0);return b;}
     private GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
     private AlertDialog.Builder dialogBuilder(){
         return new AlertDialog.Builder(this){
@@ -137,8 +171,8 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
     private LinearLayout row(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.HORIZONTAL);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private void space(LinearLayout l,int n){l.addView(new View(this),new LinearLayout.LayoutParams(1,dp(n)));}
-    private void setControls(boolean enable){for(View v:controls){v.setEnabled(enable);v.setAlpha(enable?1f:.35f);}}
-    private void renderStatus(String message){status.setText(message);badge.setText(connected?"●  연결됨":busy?"●  연결 중":"○  연결 대기");badge.setTextColor(connected?BLUE:MUTED);connectButton.setText(connected?"기기 변경":busy?"연결 취소 / 기기 선택":"기기 연결");setControls(connected);}
+    private void setControls(boolean enable){for(View v:controls){v.setEnabled(enable);v.setAlpha(enable?1f:.5f);}}
+    private void renderStatus(String message){status.setText(message);badge.setText(connected?"●  연결됨":busy?"●  연결 중":"○  연결 대기");badge.setTextColor(connected?BLUE:MUTED);connectButton.setText(connected?"기기 변경":busy?"연결 취소":"기기 연결");setControls(connected);}
     private void showKeyboard(){
         if(!connected)return;
         LinearLayout content=vertical();content.setPadding(dp(24),dp(8),dp(24),dp(8));

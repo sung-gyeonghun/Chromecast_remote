@@ -4,16 +4,16 @@
 
 # 리모콘
 
-**Chromecast 4세대를 내 휴대폰으로.**  
+**Chromecast 4세대를 내 휴대폰으로.**<br>
 파란색 라이트·다크 테마와 검색어 입력을 갖춘 Android Wi-Fi 리모컨
 
-![Version](https://img.shields.io/badge/version-0.2.0-246BFD?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.3.0-246BFD?style=flat-square)
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
 ![Connection](https://img.shields.io/badge/connection-local_Wi--Fi-58708E?style=flat-square)
 
-### [⬇ Android APK 다운로드](https://github.com/sung-gyeonghun/Chromecast_remote/raw/refs/heads/main/artifacts/remocon-0.2.0.apk)
+### [⬇ Android APK 다운로드](https://github.com/sung-gyeonghun/Chromecast_remote/raw/refs/heads/main/artifacts/remocon-0.3.0.apk)
 
-**v0.2.0 · 약 3.6 MB · Android 8.0 이상**  
+**v0.3.0 · 약 3.6 MB · Android 8.0 이상**<br>
 [설치 방법](#-설치와-연결) · [주요 기능](#-주요-기능) · [키보드 검색](#-키보드로-검색하기) · [직접 빌드](#build)
 
 </div>
@@ -35,13 +35,13 @@
   </tr>
 </table>
 
-> 화면은 Android 에뮬레이터에서 촬영했습니다. 키보드 화면의 연결 대상은 로컬 테스트 서버입니다.
+> 화면은 로컬 테스트 서버에 연결한 Android 에뮬레이터에서 촬영했습니다.
 
 ## 📲 설치와 연결
 
-**휴대폰에서 위의 [APK 다운로드](https://github.com/sung-gyeonghun/Chromecast_remote/raw/refs/heads/main/artifacts/remocon-0.2.0.apk) 링크를 열면 설치 파일을 받을 수 있습니다.**
+**휴대폰에서 위의 [APK 다운로드](https://github.com/sung-gyeonghun/Chromecast_remote/raw/refs/heads/main/artifacts/remocon-0.3.0.apk) 링크를 열면 설치 파일을 받을 수 있습니다.**
 
-1. 다운로드한 `remocon-0.2.0.apk`를 엽니다.
+1. 다운로드한 `remocon-0.3.0.apk`를 엽니다.
 2. Android가 요청하면 다운로드에 사용한 브라우저 또는 파일 관리자에 **알 수 없는 앱 설치**를 허용합니다.
 3. 휴대폰과 Chromecast를 **같은 Wi-Fi**에 연결합니다.
 4. 앱에서 **기기 연결**을 누르고 Chromecast를 선택합니다.
@@ -67,15 +67,20 @@
 | **탐색** | 위·아래·왼쪽·오른쪽, 확인, 뒤로, 홈 |
 | **미디어** | 재생 / 일시정지, 볼륨 조절, 음소거, 전원 키 |
 | **키보드** | 검색어 작성, 텍스트 전송, 검색 / Enter |
+| **앱 바로가기** | YouTube · Netflix 실행 요청 |
 | **테마** | 파란색 라이트·다크 모드, 선택 저장 |
 | **재연결** | 앱을 다시 열 때 저장된 기기에 연결 |
 
 **테마 전환:** 오른쪽 위 **물음표 아래 ‘다크’ 토글**을 켜면 다크 모드, 끄면 라이트 모드입니다. 처음 실행할 때는 휴대폰 시스템 테마를 따르며, 변경한 선택은 저장됩니다.
 
+**한 화면 구성:** 메인 화면에 스크롤을 사용하지 않습니다. 키보드·YouTube·Netflix를 한 줄로 배치하고, 방향 패드와 버튼 영역은 화면 크기에 맞춰 조절합니다.
+
+**YouTube / Netflix:** TV에 해당 앱이 설치된 상태에서 버튼을 누르면 TV 앱에 실행 요청을 보냅니다. 휴대폰의 YouTube / Netflix 앱을 실행하는 기능이 아닙니다. TV의 앱 바로가기 지원 여부와 실제 설치 상태에 따라 결과가 달라질 수 있습니다.
+
 ## ⌨ 키보드로 검색하기
 
 1. 리모컨으로 TV 앱의 **검색창을 먼저 선택**합니다.
-2. 휴대폰 앱의 **키보드로 검색어 입력**을 누릅니다.
+2. 휴대폰 앱의 **키보드**을 누릅니다.
 3. 휴대폰 키보드로 검색어를 작성합니다.
 4. 원하는 전송 방법을 선택합니다.
 
@@ -123,7 +128,7 @@ cd Chromecast_remote
 .\scripts\build.ps1
 ```
 
-스크립트는 APK 빌드, 단위 테스트, Lint를 실행한 뒤 결과를 `artifacts/remocon-0.2.0.apk`에 복사합니다. 한글 경로에서 Gradle 테스트 워커가 클래스를 찾지 못하는 문제를 피하기 위해 빌드 출력은 `%LOCALAPPDATA%/RemoconBuild`에 저장합니다.
+스크립트는 APK 빌드, 단위 테스트, Lint를 실행한 뒤 결과를 `artifacts/remocon-0.3.0.apk`에 복사합니다. 한글 경로에서 Gradle 테스트 워커가 클래스를 찾지 못하는 문제를 피하기 위해 빌드 출력은 `%LOCALAPPDATA%/RemoconBuild`에 저장합니다.
 
 ### macOS / Linux
 
@@ -138,12 +143,12 @@ bash ./gradlew assembleDebug testDebugUnitTest lintDebug
 <details>
 <summary><strong>🧪 검증 범위와 구현 근거</strong></summary>
 
-- 프로토콜 프레이밍, 오류 데이터, 페어링 해시, 한글 IME 메시지의 **단위 테스트 5개 통과**
+- 프로토콜 프레이밍, 오류 데이터, 페어링 해시, 한글 IME 메시지의 **단위 테스트 7개 통과**
 - **Android Lint 오류 0개** 및 APK 서명 검사 통과
 - 에뮬레이터에서 테마 전환·선택 저장·업데이트 설치 확인
 - 로컬 TLS 테스트 서버에서 페어링, 핑, 12개 리모컨 키, 텍스트 및 Enter 전송 확인
 
-[0.2.0 검증 기록](artifacts/verification-0.2.0.md) · [APK SHA-256](artifacts/remocon-0.2.0.sha256)
+[0.3.0 검증 기록](artifacts/verification-0.3.0.md) · [APK SHA-256](artifacts/remocon-0.3.0.sha256)
 
 통신 구현은 공개 [androidtvremote2](https://github.com/tronikos/androidtvremote2/tree/e664a8e1f14ee458b14c646bfb3ea46f10367051)의 프로토콜 구현과 스키마를 참고해 Java로 작성했습니다. Google TV / Google Home 앱이나 실제 기기 트래픽을 REA로 분석해서 만든 것은 아닙니다. REA는 이전 0.1.0 APK의 패키지 구조 검사에 사용했습니다.
 
@@ -166,7 +171,7 @@ TV 코드를 두 TLS 인증서의 RSA 공개키에 결합해 검증한 후 TV �
 
 <div align="center">
 
-**휴대폰 하나로, TV를 조금 더 편하게.**  
-[APK 다운로드](https://github.com/sung-gyeonghun/Chromecast_remote/raw/refs/heads/main/artifacts/remocon-0.2.0.apk) · [문제 제보](https://github.com/sung-gyeonghun/Chromecast_remote/issues)
+**휴대폰 하나로, TV를 조금 더 편하게.**<br>
+[APK 다운로드](https://github.com/sung-gyeonghun/Chromecast_remote/raw/refs/heads/main/artifacts/remocon-0.3.0.apk) · [문제 제보](https://github.com/sung-gyeonghun/Chromecast_remote/issues)
 
 </div>

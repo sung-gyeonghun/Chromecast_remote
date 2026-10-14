@@ -12,7 +12,10 @@ __pycache__/
 artifacts/*
 !artifacts/remocon-0.2.0.apk
 !artifacts/remocon-0.2.0.sha256
+!artifacts/remocon-0.3.0.apk
+!artifacts/remocon-0.3.0.sha256
 !artifacts/remocon-light.png
 !artifacts/remocon-dark.png
 !artifacts/remocon-keyboard.png
 !artifacts/verification-0.2.0.md
+!artifacts/verification-0.3.0.md

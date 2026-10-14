@@ -41,7 +41,7 @@ public final class RemoteClient implements AutoCloseable {
     private volatile boolean awaitingCode;
     private volatile boolean closed;
     private volatile String pendingCode;
-    private volatile boolean imeSupported, imeReady;
+    private volatile boolean imeSupported, imeReady, appLinkSupported;
     private int imeCounter, fieldCounter;
     private String currentApp = "";
     private KeyStore identity;
@@ -85,8 +85,21 @@ public final class RemoteClient implements AutoCloseable {
         });
         return true;
     }
+    public boolean launchApp(String link) {
+        final int token;final SSLSocket target;final byte[] payload;
+        synchronized(lock){
+            if(!connected||closed||!appLinkSupported)return false;
+            token=generation;target=socket;payload=AppLaunch.encode(link);
+        }
+        writer.execute(()->{
+            try{
+                synchronized(lock){if(!current(token)||!connected||socket!=target)return;imeReady=false;}
+                synchronized(target){ProtoWire.writeFrame(target.getOutputStream(),payload);}
+            }catch(Exception e){fail(token,e);closeSocket(token);}
+        });return true;
+    }
     public void disconnect() {
-        synchronized (lock) { generation++; connected = false; imeSupported=false;imeReady=false;imeCounter=0;fieldCounter=0;currentApp="";awaitingCode = false; pendingCode = null; closeSocket(); lock.notifyAll(); }
+        synchronized (lock) { generation++; connected = false; imeSupported=false;imeReady=false;appLinkSupported=false;imeCounter=0;fieldCounter=0;currentApp="";awaitingCode = false; pendingCode = null; closeSocket(); lock.notifyAll(); }
     }
     @Override public void close() { disconnect(); closed = true; reader.shutdownNow(); writer.shutdownNow(); }
     private static String normalize(String host) { return host == null ? "" : host.trim().toLowerCase(java.util.Locale.ROOT); }
@@ -158,14 +171,14 @@ public final class RemoteClient implements AutoCloseable {
         if (pin == null) throw new IOException("먼저 TV와 페어링하세요.");
         status(token,"Chromecast에 연결하고 있습니다…");
         SSLSocket s = open(host,6466,Base64.decode(pin,Base64.NO_WRAP),token);
-        int features = 1 | 2 | 4 | 32 | 64;
+        int features = 1 | 2 | 4 | 32 | 64 | 512;
         long deadline = System.currentTimeMillis()+15000;
         while (current(token)) {
             ProtoWire.Fields message = ProtoWire.parse(ProtoWire.readFrame(s.getInputStream()));
             if (!current(token)) return;
             if (message.has(1)) {
                 features &= (int)message.nested(1).number(1);
-                synchronized(lock){if(!current(token))return;imeSupported=(features & 4)!=0;}
+                synchronized(lock){if(!current(token))return;imeSupported=(features & 4)!=0;appLinkSupported=(features & 512)!=0;}
                 if ((features & 2) == 0) throw new IOException("TV의 Remote Service가 키 입력을 지원하지 않습니다.");
                 ProtoWire.Message info = new ProtoWire.Message().number(3,1).text(4,"1").text(5,"com.morluto.remocon").text(6,"1.0.0");
                 send(s,new ProtoWire.Message().nested(1,new ProtoWire.Message().number(1,features).nested(2,info)));

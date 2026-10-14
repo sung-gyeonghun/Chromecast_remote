@@ -84,11 +84,11 @@ public final class MockTv {
             // Restarting the mock with the SAME certificate allows an app's persisted pin reconnect.
             log("CONTROL_CLIENT_NOT_PAIRED_THIS_RUN");
         }
-        send(s,new ProtoWire.Message().nested(1,new ProtoWire.Message().number(1,103).nested(2,new ProtoWire.Message().text(1,"Chromecast Mock").text(2,"Local Test"))));
+        send(s,new ProtoWire.Message().nested(1,new ProtoWire.Message().number(1,615).nested(2,new ProtoWire.Message().text(1,"Chromecast Mock").text(2,"Local Test"))));
         ProtoWire.Fields config = receive(s); check(config.has(1),"remote_configure");
-        check(config.nested(1).number(1)==103,"features 103 with IME"); check(config.nested(1).nested(2).number(3)==1,"device unknown1");
-        send(s,new ProtoWire.Message().nested(2,new ProtoWire.Message().number(1,103)));
-        ProtoWire.Fields active = receive(s); check(active.has(2) && active.nested(2).number(1)==103,"remote_set_active");
+        check(config.nested(1).number(1)==615,"features 615 with IME and app links"); check(config.nested(1).nested(2).number(3)==1,"device unknown1");
+        send(s,new ProtoWire.Message().nested(2,new ProtoWire.Message().number(1,615)));
+        ProtoWire.Fields active = receive(s); check(active.has(2) && active.nested(2).number(1)==615,"remote_set_active");
         send(s,new ProtoWire.Message().nested(20,new ProtoWire.Message().nested(1,new ProtoWire.Message().text(12,"mock.search"))));
         send(s,new ProtoWire.Message().nested(21,new ProtoWire.Message().number(1,17).number(2,42)));
         send(s,new ProtoWire.Message().nested(40,new ProtoWire.Message().number(1,1)));
@@ -102,6 +102,7 @@ public final class MockTv {
                 if(message.has(9)) { check(message.nested(9).number(1)==counter,"ping id"); pong=true; log("PING_OK="+counter); }
                 if(message.has(10)) { check(message.nested(10).number(2)==3,"short key"); log("KEY="+message.nested(10).number(1)); }
                 if(message.has(21)) checkText(message.nested(21));
+                if(message.has(90)) checkAppLink(s,message.nested(90));
             }
             counter++;
             // Use socket timeout as a bounded wait, also collecting keys between pings.
@@ -112,6 +113,7 @@ public final class MockTv {
                     ProtoWire.Fields message = receive(s);
                     if(message.has(10)) { check(message.nested(10).number(2)==3,"short key"); log("KEY="+message.nested(10).number(1)); }
                     if(message.has(21)) checkText(message.nested(21));
+                if(message.has(90)) checkAppLink(s,message.nested(90));
                 } catch(java.net.SocketTimeoutException expected) { break; }
             }
             s.setSoTimeout(10000);
@@ -123,6 +125,11 @@ public final class MockTv {
         ProtoWire.Fields value=edit.nested(2);String text=new String(value.data(3),java.nio.charset.StandardCharsets.UTF_8);
         check(value.number(1)==text.length()-1&&value.number(2)==text.length()-1,"text positions");
         log("TEXT="+text);
+    }
+    private static void checkAppLink(SSLSocket socket,ProtoWire.Fields request)throws IOException{
+        String link=new String(request.data(1),java.nio.charset.StandardCharsets.UTF_8);
+        check(link.equals("https://www.youtube.com")||link.equals("netflix://"),"selected app link");log("APP_LINK="+link);
+        send(socket,new ProtoWire.Message().nested(21,new ProtoWire.Message().number(1,17).number(2,42)));
     }
     private static void checkEncoding(ProtoWire.Fields field) throws IOException { check(field.number(1)==3 && field.number(2)==6,"hex encoding"); }
     private static void poloCheck(ProtoWire.Fields fields,int field) throws IOException { check(fields.number(1)==2 && fields.number(2)==200 && fields.has(field),"polo field "+field); }

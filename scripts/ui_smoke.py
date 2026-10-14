@@ -71,3 +71,22 @@ elif sys.argv[2] == "keyboard":
     tap(text="검색 / Enter")
     find(text="●  연결됨")
     print("KEYBOARD_SEARCH_UI_OK")
+elif sys.argv[2] == "apps":
+    find(text="●  연결됨")
+    tap(desc="YouTube 실행")
+    tap(desc="Netflix 실행")
+    find(text="●  연결됨")
+    print("TWO_APP_SHORTCUTS_UI_OK")
+elif sys.argv[2] == "layout":
+    all_nodes=nodes()
+    app_nodes=[n for n in all_nodes if n.get("package")=="com.morluto.remocon"]
+    assert not any(n.get("class")=="android.widget.ScrollView" or n.get("scrollable")=="true" for n in app_nodes),"Main screen must not scroll"
+    content=next(n for n in app_nodes if n.get("resource-id")=="android:id/content")
+    left,top,right,bottom=map(int,re.findall(r"\d+",content.get("bounds")))
+    controls=["사용 안내","다크 모드 설정","키보드 입력","YouTube 실행","Netflix 실행","위","아래","왼쪽","오른쪽","확인","뒤로","홈","재생 / 일시정지","볼륨 줄이기","음소거","볼륨 높이기","전원 전환"]
+    for desc in controls:
+        n=next(n for n in app_nodes if n.get("content-desc")==desc)
+        x1,y1,x2,y2=map(int,re.findall(r"\d+",n.get("bounds")))
+        assert left<=x1<x2<=right and top<=y1<y2<=bottom,(desc,n.get("bounds"),content.get("bounds"))
+    assert any(n.get("text") in ["기기 연결","기기 변경","연결 취소"] for n in app_nodes)
+    print("ALL_18_CONTROLS_VISIBLE_NO_SCROLL_OK")
