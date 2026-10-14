@@ -1,0 +1,7 @@
+plugins { id 'com.android.application' version '8.9.1' apply false }
+// Optional ASCII output directory for Android/Gradle workers on Windows.
+allprojects {
+    if (providers.gradleProperty('remoconBuildDir').isPresent()) {
+        layout.buildDirectory.set(file("${providers.gradleProperty('remoconBuildDir').get()}/${project.name}"))
+    }
+}

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-label="REMOCON — Your TV, in your hand">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0c1424"/><stop offset="1" stop-color="#193a70"/></linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#7dabff"/><stop offset="1" stop-color="#246bfd"/></linearGradient>
+  </defs>
+  <rect width="1200" height="360" rx="28" fill="url(#bg)"/>
+  <circle cx="1110" cy="-90" r="300" fill="#246bfd" opacity=".12"/>
+  <circle cx="1050" cy="400" r="250" fill="#7dabff" opacity=".07"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="64" y="88" fill="#8fb8ff" font-size="15" letter-spacing="5">YOUR TV, IN YOUR HAND</text>
+    <text x="60" y="179" fill="#f1f6ff" font-size="76" font-weight="700" letter-spacing="-2">REMOCON</text>
+    <text x="64" y="224" fill="#b9cbea" font-size="22">A pocket remote for Chromecast with Google TV.</text>
+    <g font-size="14" fill="#dce8ff">
+      <rect x="64" y="267" width="102" height="32" rx="16" fill="#243d61"/><text x="85" y="288">Android 8+</text>
+      <rect x="178" y="267" width="113" height="32" rx="16" fill="#243d61"/><text x="199" y="288">Light / Dark</text>
+      <rect x="303" y="267" width="92" height="32" rx="16" fill="#243d61"/><text x="327" y="288">Wi-Fi</text>
+    </g>
+  </g>
+  <g transform="translate(945 30) rotate(10 70 145)">
+    <rect x="-7" y="7" width="154" height="304" rx="40" fill="#030b19" opacity=".35"/>
+    <rect width="140" height="298" rx="36" fill="#e7effb"/>
+    <circle cx="70" cy="92" r="48" fill="#d1dff4"/>
+    <circle cx="70" cy="92" r="23" fill="url(#blue)"/>
+    <g fill="#345b8d"><path d="M64 57l6-8 6 8z"/><path d="M64 127l6 8 6-8z"/><path d="M35 86l-8 6 8 6z"/><path d="M105 86l8 6-8 6z"/></g>
+    <rect x="25" y="164" width="38" height="33" rx="16" fill="#d1dff4"/><rect x="77" y="164" width="38" height="33" rx="16" fill="#d1dff4"/>
+    <path d="M40 175l-5 5 5 5m-5-5h15" fill="none" stroke="#345b8d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M88 181l8-7 8 7v9h-16z" fill="none" stroke="#345b8d" stroke-width="2.5" stroke-linejoin="round"/>
+    <rect x="25" y="216" width="90" height="34" rx="17" fill="url(#blue)"/>
+    <path d="M45 233h12m28-6v12m-6-6h12" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+</svg>
