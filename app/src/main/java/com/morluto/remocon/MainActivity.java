@@ -79,7 +79,7 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
             v.setPadding(dp(18)+left,dp(10)+top,dp(18)+right,dp(10)+bottom);return insets;
         });
 
-        LinearLayout header=row(),heading=vertical();
+        LinearLayout header=vertical(),toolbar=row();
         FrameLayout powerArea=new FrameLayout(this);
         ImageButton power=new ImageButton(this);power.setImageResource(com.morluto.remocon.R.drawable.ic_power);power.setContentDescription("전원 전환");
         power.setScaleType(ImageView.ScaleType.FIT_CENTER);power.setPadding(dp(12),dp(12),dp(12),dp(12));
@@ -90,15 +90,21 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
             int size=Math.max(0,Math.min(dp(56),Math.min(r-l,b-t)));FrameLayout.LayoutParams p=(FrameLayout.LayoutParams)power.getLayoutParams();
             if(p.width!=size||p.height!=size){p.width=size;p.height=size;power.setLayoutParams(p);}
         });
-        heading.addView(powerArea,new LinearLayout.LayoutParams(-1,0,3));
-        heading.addView(fittedLabel("Chromecast 4세대 · Google TV",10,12,MUTED),new LinearLayout.LayoutParams(-1,0,1));
-        header.addView(heading,new LinearLayout.LayoutParams(0,-1,1));
-        LinearLayout tools=vertical();tools.setGravity(Gravity.CENTER);
-        Button help=button("?",false);help.setContentDescription("사용 안내");tools.addView(help,new LinearLayout.LayoutParams(dp(44),0,1));help.setOnClickListener(v->showHelp());
+        toolbar.addView(powerArea,new LinearLayout.LayoutParams(0,-1,1));
+        LinearLayout tools=row();tools.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        Button help=button("?",false);help.setContentDescription("사용 안내");help.setOnClickListener(v->showHelp());
         Switch mode=new Switch(this);mode.setText("다크");mode.setTextSize(11);mode.setTextColor(MUTED);mode.setChecked(dark);mode.setContentDescription("다크 모드 설정");mode.setSwitchPadding(dp(4));
         mode.setThumbTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked},new int[]{}},new int[]{BLUE,Color.WHITE}));
         mode.setTrackTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked},new int[]{}},new int[]{Color.parseColor(dark?"#395D91":"#A7C4FF"),BORDER}));
-        tools.addView(mode,new LinearLayout.LayoutParams(dp(82),0,1));header.addView(tools,new LinearLayout.LayoutParams(dp(88),-1));section(root,header,14);
+        tools.addView(mode,new LinearLayout.LayoutParams(dp(82),dp(44)));
+        LinearLayout.LayoutParams helpParams=new LinearLayout.LayoutParams(dp(44),dp(44));helpParams.leftMargin=dp(8);tools.addView(help,helpParams);
+        tools.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+            int size=Math.max(0,Math.min(dp(44),b-t));LinearLayout.LayoutParams hp=(LinearLayout.LayoutParams)help.getLayoutParams();
+            if(hp.width!=size||hp.height!=size){hp.width=size;hp.height=size;help.setLayoutParams(hp);}
+            LinearLayout.LayoutParams mp=(LinearLayout.LayoutParams)mode.getLayoutParams();if(mp.height!=size){mp.height=size;mode.setLayoutParams(mp);}
+        });
+        toolbar.addView(tools,new LinearLayout.LayoutParams(dp(134),-1));header.addView(toolbar,new LinearLayout.LayoutParams(-1,0,3));
+        header.addView(fittedLabel("Chromecast 4세대 · Google TV",10,12,MUTED),new LinearLayout.LayoutParams(-1,0,1));section(root,header,14);
         mode.setOnCheckedChangeListener((b,value)->{dark=value;prefs.edit().putBoolean("dark",dark).apply();applyPalette();buildUi();});
 
         LinearLayout card=row();card.setPadding(dp(12),dp(8),dp(12),dp(8));card.setBackground(shape(CARD,18));
