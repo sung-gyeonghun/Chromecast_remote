@@ -80,9 +80,17 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
         });
 
         LinearLayout header=row(),heading=vertical();
-        TextView eyebrow=fittedLabel("YOUR TV, IN YOUR HAND",9,11,BLUE);eyebrow.setLetterSpacing(.08f);
-        heading.addView(eyebrow,new LinearLayout.LayoutParams(-1,0,1));
-        TextView title=fittedLabel("리모콘",20,32,INK);title.setTypeface(null,Typeface.BOLD);heading.addView(title,new LinearLayout.LayoutParams(-1,0,2));
+        FrameLayout powerArea=new FrameLayout(this);
+        ImageButton power=new ImageButton(this);power.setImageResource(com.morluto.remocon.R.drawable.ic_power);power.setContentDescription("전원 전환");
+        power.setScaleType(ImageView.ScaleType.FIT_CENTER);power.setPadding(dp(12),dp(12),dp(12),dp(12));
+        power.setBackground(new RippleDrawable(ColorStateList.valueOf(Color.argb(55,239,68,68)),shape(Color.parseColor(dark?"#3B2430":"#FDE7EB"),40),null));
+        controls.add(power);power.setOnClickListener(v->{if(connected){v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);remote.sendKey(26);}});
+        powerArea.addView(power,new FrameLayout.LayoutParams(dp(56),dp(56),Gravity.LEFT|Gravity.CENTER_VERTICAL));
+        powerArea.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+            int size=Math.max(0,Math.min(dp(56),Math.min(r-l,b-t)));FrameLayout.LayoutParams p=(FrameLayout.LayoutParams)power.getLayoutParams();
+            if(p.width!=size||p.height!=size){p.width=size;p.height=size;power.setLayoutParams(p);}
+        });
+        heading.addView(powerArea,new LinearLayout.LayoutParams(-1,0,3));
         heading.addView(fittedLabel("Chromecast 4세대 · Google TV",10,12,MUTED),new LinearLayout.LayoutParams(-1,0,1));
         header.addView(heading,new LinearLayout.LayoutParams(0,-1,1));
         LinearLayout tools=vertical();tools.setGravity(Gravity.CENTER);
@@ -129,7 +137,6 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
 
         LinearLayout navigation=row();addKey(navigation,"↶","뒤로",4);addKey(navigation,"⌂","홈",3);addKey(navigation,"▶Ⅱ","재생 / 일시정지",85);section(root,navigation,10);
         LinearLayout audio=row();addKey(audio,"−","볼륨 줄이기",25);addKey(audio,"음소거","음소거",164);addKey(audio,"＋","볼륨 높이기",24);section(root,audio,10);
-        Button power=keyButton("전원","전원 전환",26,false);section(root,power,9);
         setContentView(root);renderStatus(previousStatus);
     }
     private void section(LinearLayout root,View child,float weight){
