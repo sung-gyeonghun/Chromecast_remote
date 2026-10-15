@@ -38,7 +38,7 @@ def clear_input():
 if sys.argv[2] == "pair":
     try: tap(text="기기 연결")
     except AssertionError:
-        tap(text="연결 관리")
+        tap(desc="연결됨, 연결 관리 열기")
         tap(text="기기 변경")
     tap(text="IP 직접 입력")
     tap(cls="android.widget.EditText")
@@ -85,5 +85,5 @@ elif sys.argv[2] == "layout":
         x1,y1,x2,y2=map(int,re.findall(r"\d+",n.get("bounds")))
         assert left<=x1<x2<=right and top<=y1<y2<=bottom,(desc,n.get("bounds"),content.get("bounds"))
     assert not any(n.get("content-desc")=="키보드 입력" for n in app_nodes)
-    assert any(n.get("text") in ["기기 연결","연결 관리"] for n in app_nodes)
+    assert any(n.get("text") in ["기기 연결","연결 관리"] or n.get("content-desc")=="연결됨, 연결 관리 열기" for n in app_nodes)
     print("ALL_17_CONTROLS_VISIBLE_NO_SCROLL_OK")

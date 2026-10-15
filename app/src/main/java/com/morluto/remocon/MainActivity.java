@@ -39,6 +39,8 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
     private SharedPreferences prefs;
     private TextView deviceName, status, badge;
     private Button connectButton;
+    private View connectionCard;
+    private TextView connectedIndicator;
     private AlertDialog deviceDialog, pairingDialog;
     private LinearLayout deviceList;
     private String host = "", name = "Chromecast with Google TV";
@@ -117,7 +119,10 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
         header.addView(fittedLabel("Chromecast 4세대 · Google TV",10,12,MUTED),new LinearLayout.LayoutParams(-1,0,1));section(root,header,14);
         mode.setOnCheckedChangeListener((b,value)->{dark=value;prefs.edit().putBoolean("dark",dark).apply();applyPalette();buildUi();});
 
-        LinearLayout card=row();card.setPadding(dp(12),dp(8),dp(12),dp(8));card.setBackground(shape(CARD,18));
+        connectedIndicator=fittedLabel("●  연결됨",11,12,BLUE);connectedIndicator.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
+        connectedIndicator.setContentDescription("연결됨, 연결 관리 열기");connectedIndicator.setOnClickListener(v->connectionAction());
+        root.addView(connectedIndicator,new LinearLayout.LayoutParams(-1,dp(40)));
+        LinearLayout card=row();connectionCard=card;card.setPadding(dp(12),dp(8),dp(12),dp(8));card.setBackground(shape(CARD,18));
         LinearLayout details=vertical();
         badge=fittedLabel("○  연결 대기",10,11,BLUE);details.addView(badge,new LinearLayout.LayoutParams(-1,0,1));
         deviceName=fittedLabel(name,10,16,INK);deviceName.setTypeface(null,Typeface.BOLD);details.addView(deviceName,new LinearLayout.LayoutParams(-1,0,1.5f));
@@ -194,7 +199,7 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private void space(LinearLayout l,int n){l.addView(new View(this),new LinearLayout.LayoutParams(1,dp(n)));}
     private void setControls(boolean enable){for(View v:controls){v.setEnabled(enable);v.setAlpha(enable?1f:.5f);}}
-    private void renderStatus(String message){status.setText(message);badge.setText(connected?"●  연결됨":busy?"●  연결 중":"○  연결 대기");badge.setTextColor(connected?BLUE:MUTED);connectButton.setText(connected||busy?"연결 관리":"기기 연결");setControls(connected);}
+    private void renderStatus(String message){connectionCard.setVisibility(connected?View.GONE:View.VISIBLE);connectedIndicator.setVisibility(connected?View.VISIBLE:View.GONE);status.setText(message);badge.setText(connected?"●  연결됨":busy?"●  연결 중":"○  연결 대기");badge.setTextColor(connected?BLUE:MUTED);connectButton.setText(connected||busy?"연결 관리":"기기 연결");setControls(connected);}
     private void connectionAction(){
         if(remote==null){renderStatus("연결 기능을 준비하고 있어요. 잠시 후 다시 눌러 주세요.");return;}
         if(remote.isMaintainingConnection())dialogBuilder().setTitle("연결 관리").setMessage("연결은 앱을 닫아도 유지합니다. 직접 해제하거나 다른 기기를 선택할 수 있어요.")
@@ -247,6 +252,6 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
     private void cancelPairing(){remote.disconnect();busy=false;connected=false;renderStatus("페어링을 취소했어요.");pairingDialog=null;}
     @Override public void onConnected(){runOnUiThread(()->{if(!started)return;connected=true;busy=false;if(pairingDialog!=null){pairingDialog.dismiss();pairingDialog=null;}prefs.edit().putString("host",host).putString("name",name).apply();renderStatus(host+" · 리모컨을 사용할 수 있어요.");});}
     @Override public void onError(String message){runOnUiThread(()->{if(!started)return;connected=false;busy=false;if(pairingDialog!=null){pairingDialog.dismiss();pairingDialog=null;}renderStatus(message);if(!host.isEmpty())dialogBuilder().setTitle("연결을 확인해 주세요").setMessage(message+"\n\n같은 Wi-Fi인지, TV가 켜져 있는지 확인하세요. 페어링 정보가 바뀌었다면 다시 페어링해 주세요.").setPositiveButton("다시 연결",(d,w)->connectTo(host,name,false)).setNeutralButton("다시 페어링",(d,w)->connectTo(host,name,true)).setNegativeButton("닫기",null).show();});}
-    private void showHelp(){dialogBuilder().setTitle("리모콘 사용 안내").setMessage("1. 휴대폰과 Chromecast 4세대를 같은 Wi-Fi에 연결하세요.\n2. ‘기기 연결’에서 TV를 선택하세요.\n3. TV에 표시되는 6자리 코드를 입력하세요.\n\n검색되지 않으면 IP 직접 입력을 이용하세요. 게스트 Wi-Fi나 AP 격리가 켜진 네트워크에서는 연결되지 않을 수 있어요.\n\n앱을 닫아도 연결을 유지하며, 연결 관리 또는 알림에서 해제할 수 있습니다. 네트워크가 끊기면 자동 재연결합니다.\n\n볼륨은 TV 키 입력 후 Chromecast 직접 제어를 시도합니다. 적외선 전용 또는 고정 볼륨 설정은 Google TV에서 변경해야 할 수 있습니다. 전원은 TV의 HDMI-CEC 설정에 따라 동작합니다. 음성 입력과 TV 입력 전환은 이 버전에서 지원하지 않습니다.\n\n인증 정보는 이 휴대폰의 앱 저장소에만 보관합니다.").setPositiveButton("확인",null).show();}
+    private void showHelp(){dialogBuilder().setTitle("리모콘 사용 안내").setMessage("1. 휴대폰과 Chromecast 4세대를 같은 Wi-Fi에 연결하세요.\n2. ‘기기 연결’에서 TV를 선택하세요.\n3. TV에 표시되는 6자리 코드를 입력하세요.\n\n검색되지 않으면 IP 직접 입력을 이용하세요. 게스트 Wi-Fi나 AP 격리가 켜진 네트워크에서는 연결되지 않을 수 있어요.\n\n앱을 닫아도 연결을 유지하며, ‘연결됨’ 표시를 누르거나 알림에서 해제할 수 있습니다. 네트워크가 끊기면 자동 재연결합니다.\n\n볼륨은 TV 키 입력 후 Chromecast 직접 제어를 시도합니다. 적외선 전용 또는 고정 볼륨 설정은 Google TV에서 변경해야 할 수 있습니다. 전원은 TV의 HDMI-CEC 설정에 따라 동작합니다. 음성 입력과 TV 입력 전환은 이 버전에서 지원하지 않습니다.\n\n인증 정보는 이 휴대폰의 앱 저장소에만 보관합니다.").setPositiveButton("확인",null).show();}
 }
 
