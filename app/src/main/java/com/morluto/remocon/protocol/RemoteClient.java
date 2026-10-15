@@ -27,6 +27,9 @@ public final class RemoteClient implements AutoCloseable {
         void onPairingRequired();
         void onConnected();
         void onError(String message);
+        default void onReconnecting(String message){onStatus(message);}
+        default void onNotice(String message){onStatus(message);}
+        default void onDisconnected(String message){onStatus(message);}
     }
     private final Context context;
     private final Listener listener;
@@ -34,6 +37,12 @@ public final class RemoteClient implements AutoCloseable {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService reader = Executors.newSingleThreadExecutor();
     private final ExecutorService writer = Executors.newSingleThreadExecutor();
+    private final ExecutorService volumeWorker = Executors.newSingleThreadExecutor();
+    private final CastVolume castVolume;
+    private String activeHost="";
+    private long volumeRevision;
+    private int volumeLevel=-1;
+    private boolean volumeMuted;
     private final Object lock = new Object();
     private volatile int generation;
     private volatile SSLSocket socket;
@@ -41,14 +50,13 @@ public final class RemoteClient implements AutoCloseable {
     private volatile boolean awaitingCode;
     private volatile boolean closed;
     private volatile String pendingCode;
-    private volatile boolean imeSupported, imeReady, appLinkSupported;
-    private int imeCounter, fieldCounter;
-    private String currentApp = "";
+    private volatile boolean appLinkSupported;
     private KeyStore identity;
     private X509Certificate clientCertificate;
 
     public RemoteClient(Context context, Listener listener) {
         this.context = context.getApplicationContext(); this.listener = listener;
+        castVolume=new CastVolume(this.context);
         pins = this.context.getSharedPreferences("remote_trusted_keys", Context.MODE_PRIVATE);
     }
     public boolean isPaired(String host) { return pins.contains(normalize(host)); }
@@ -66,24 +74,8 @@ public final class RemoteClient implements AutoCloseable {
                 synchronized(lock) { if (!current(token) || !connected) return; target = socket; }
                 if (target != null) send(target, new ProtoWire.Message().nested(10,new ProtoWire.Message().number(1,keyCode).number(2,3)));
             }
-            catch (Exception e) { fail(token,e); closeSocket(token); }
+            catch (Exception e) { closeSocket(token); }
         });
-    }
-    /** False until the TV negotiates IME and supplies input counters. */
-    public boolean sendText(String text, boolean enter) {
-        final int token;final SSLSocket target;final byte[] payload;
-        synchronized(lock) {
-            if(!connected || closed || !imeSupported || !imeReady || text==null || text.isEmpty() || text.length()>1000)return false;
-            token=generation;target=socket;payload=ImeMessage.encode(text,imeCounter,fieldCounter);
-        }
-        writer.execute(()->{
-            try{
-                synchronized(lock){if(!current(token)||!connected||socket!=target)return;}
-                synchronized(target){ProtoWire.writeFrame(target.getOutputStream(),payload);}
-                if(enter)send(target,new ProtoWire.Message().nested(10,new ProtoWire.Message().number(1,66).number(2,3)));
-            }catch(Exception e){fail(token,e);closeSocket(token);}
-        });
-        return true;
     }
     public boolean launchApp(String link) {
         final int token;final SSLSocket target;final byte[] payload;
@@ -93,15 +85,15 @@ public final class RemoteClient implements AutoCloseable {
         }
         writer.execute(()->{
             try{
-                synchronized(lock){if(!current(token)||!connected||socket!=target)return;imeReady=false;}
+                synchronized(lock){if(!current(token)||!connected||socket!=target)return;}
                 synchronized(target){ProtoWire.writeFrame(target.getOutputStream(),payload);}
-            }catch(Exception e){fail(token,e);closeSocket(token);}
+            }catch(Exception e){closeSocket(token);}
         });return true;
     }
     public void disconnect() {
-        synchronized (lock) { generation++; connected = false; imeSupported=false;imeReady=false;appLinkSupported=false;imeCounter=0;fieldCounter=0;currentApp="";awaitingCode = false; pendingCode = null; closeSocket(); lock.notifyAll(); }
+        synchronized (lock) { generation++; connected = false; appLinkSupported=false;activeHost="";volumeRevision=0;volumeLevel=-1;awaitingCode = false; pendingCode = null; closeSocket(); castVolume.cancel(); lock.notifyAll(); }
     }
-    @Override public void close() { disconnect(); closed = true; reader.shutdownNow(); writer.shutdownNow(); }
+    @Override public void close() { disconnect(); closed = true; reader.shutdownNow(); writer.shutdownNow(); volumeWorker.shutdownNow(); }
     private static String normalize(String host) { return host == null ? "" : host.trim().toLowerCase(java.util.Locale.ROOT); }
     private boolean current(int token) { return !closed && generation == token; }
     private void event(int token, Runnable action) { main.post(() -> { if (current(token)) action.run(); }); }
@@ -111,18 +103,60 @@ public final class RemoteClient implements AutoCloseable {
         event(token,() -> listener.onError(error.getMessage() == null ? "연결에 실패했습니다." : error.getMessage()));
     }
     private void start(String input, boolean pair) {
-        if (closed) return;
-        disconnect(); final int token = generation; final String host = normalize(input);
-        reader.execute(() -> {
+        if(closed)return;
+        disconnect();final int token=generation;final String host=normalize(input);
+        reader.execute(()->{
             try {
-                if (host.isEmpty() || host.contains("/") || host.contains(":") || host.contains(" ")) throw new IOException("Chromecast의 IPv4 주소 또는 호스트 이름을 입력하세요.");
+                if(host.isEmpty()||host.contains("/")||host.contains(":" )||host.contains(" "))throw new IllegalArgumentException("Chromecast의 IPv4 주소를 입력하세요.");
                 loadIdentity();
-                if (!current(token)) return;
-                if (pair) pair(host,token);
-                if (!current(token)) return;
-                control(host,token);
-            } catch (Exception e) { if (current(token)) fail(token,e); }
-            finally { closeSocket(token); }
+                if(!current(token))return;
+                if(pair)pair(host,token);
+                if(!current(token))return;
+                int failures=0;
+                while(current(token)){
+                    try{
+                        synchronized(lock){activeHost=host;}
+                        control(host,token);
+                        if(current(token))throw new EOFException("TV closed connection");
+                    }catch(Exception e){
+                        if(!current(token))return;
+                        closeSocket(token);
+                        if(!(e instanceof IOException)||isTrustFailure(e))throw e;
+                        failures++;
+                        event(token,()->listener.onReconnecting("연결을 복구하고 있어요. Wi-Fi가 돌아오면 자동으로 재연결합니다."));
+                        synchronized(lock){if(current(token))lock.wait(Math.min(10000,1000L<<Math.min(failures-1,3)));}
+                    }
+                }
+            }catch(Exception e){if(current(token))fail(token,e);}
+            finally{closeSocket(token);}
+        });
+    }
+    private static boolean isTrustFailure(Throwable error){
+        for(Throwable e=error;e!=null;e=e.getCause())if(e instanceof java.security.cert.CertificateException||e instanceof SSLPeerUnverifiedException)return true;
+        return false;
+    }
+    public boolean isConnected(){return connected;}
+    public void networkChanged(){if(connected)closeSocket(generation);}
+    public void sendVolume(int keyCode){
+        if(keyCode!=24&&keyCode!=25&&keyCode!=164)return;
+        final int token=generation;final SSLSocket target;final String host;
+        synchronized(lock){if(!connected||closed)return;target=socket;host=activeHost;}
+        volumeWorker.execute(()->{
+            try{
+                long before;int level;boolean muted;
+                synchronized(lock){if(!current(token)||!connected||socket!=target)return;before=volumeRevision;level=volumeLevel;muted=volumeMuted;}
+                // Real key down/up events also support receivers that ignore SHORT for volume.
+                send(target,new ProtoWire.Message().nested(10,new ProtoWire.Message().number(1,keyCode).number(2,1)));
+                Thread.sleep(45);
+                send(target,new ProtoWire.Message().nested(10,new ProtoWire.Message().number(1,keyCode).number(2,2)));
+                long end=android.os.SystemClock.elapsedRealtime()+800;
+                synchronized(lock){
+                    while(current(token)&&connected&&volumeRevision==before&&android.os.SystemClock.elapsedRealtime()<end)lock.wait(Math.max(1,end-android.os.SystemClock.elapsedRealtime()));
+                    if(!current(token)||!connected||socket!=target)return;
+                    if(volumeRevision>before&&(keyCode==164?muted!=volumeMuted:level!=volumeLevel))return;
+                }
+                castVolume.adjust(host,keyCode,()->current(token)&&connected);
+            }catch(Exception e){if(current(token)&&connected)event(token,()->listener.onNotice("볼륨 조절을 확인해 주세요: "+(e.getMessage()==null?"TV의 볼륨 제어 설정을 확인하세요.":e.getMessage())));}
         });
     }
     private void pair(String host,int token) throws Exception {
@@ -171,34 +205,32 @@ public final class RemoteClient implements AutoCloseable {
         if (pin == null) throw new IOException("먼저 TV와 페어링하세요.");
         status(token,"Chromecast에 연결하고 있습니다…");
         SSLSocket s = open(host,6466,Base64.decode(pin,Base64.NO_WRAP),token);
-        int features = 1 | 2 | 4 | 32 | 64 | 512;
+        int features = 1 | 2 | 32 | 64 | 512;
         long deadline = System.currentTimeMillis()+15000;
         while (current(token)) {
             ProtoWire.Fields message = ProtoWire.parse(ProtoWire.readFrame(s.getInputStream()));
             if (!current(token)) return;
             if (message.has(1)) {
                 features &= (int)message.nested(1).number(1);
-                synchronized(lock){if(!current(token))return;imeSupported=(features & 4)!=0;appLinkSupported=(features & 512)!=0;}
-                if ((features & 2) == 0) throw new IOException("TV의 Remote Service가 키 입력을 지원하지 않습니다.");
+                synchronized(lock){if(!current(token))return;appLinkSupported=(features & 512)!=0;}
+                if ((features & 2) == 0) throw new IllegalStateException("TV의 Remote Service가 키 입력을 지원하지 않습니다.");
                 ProtoWire.Message info = new ProtoWire.Message().number(3,1).text(4,"1").text(5,"com.morluto.remocon").text(6,"1.0.0");
                 send(s,new ProtoWire.Message().nested(1,new ProtoWire.Message().number(1,features).nested(2,info)));
             }
             if (message.has(2)) send(s,new ProtoWire.Message().nested(2,new ProtoWire.Message().number(1,features)));
             if (message.has(8)) send(s,new ProtoWire.Message().nested(9,new ProtoWire.Message().number(1,message.nested(8).number(1))));
-            if (message.has(3)) throw new IOException("TV 리모컨 서비스가 오류를 반환했습니다.");
-            synchronized(lock){
-                if(!current(token))return;
-                if(message.has(20)){
-                    String app=new String(message.nested(20).nested(1).data(12),java.nio.charset.StandardCharsets.UTF_8);
-                    if(!app.isEmpty()&&!app.equals(currentApp)){currentApp=app;imeReady=false;}
-                }
-                if(message.has(21)){
-                    ProtoWire.Fields ime=message.nested(21);imeCounter=(int)ime.number(1);fieldCounter=(int)ime.number(2);imeReady=imeSupported;
-                }
+            if(message.has(3)){
+                ProtoWire.Fields failed=message.nested(3).nested(2);
+                int key=failed.has(10)?(int)failed.nested(10).number(1):-1;
+                if(key!=24&&key!=25&&key!=164)event(token,()->listener.onNotice("TV가 해당 명령을 거절했습니다. 연결은 유지합니다."));
+            }
+            if(message.has(50)){
+                ProtoWire.Fields volume=message.nested(50);
+                synchronized(lock){if(!current(token))return;volumeLevel=(int)volume.number(7);volumeMuted=volume.number(8)!=0;volumeRevision++;lock.notifyAll();}
             }
             if (message.has(40) && !connected) {
                 synchronized(lock) { if (!current(token)) return; connected = true; }
-                s.setSoTimeout(16000); event(token,listener::onConnected);
+                s.setSoTimeout(0); event(token,listener::onConnected);
             }
             if (!connected && System.currentTimeMillis() > deadline) throw new IOException("TV 리모컨 초기화 시간이 초과되었습니다.");
         }
@@ -216,13 +248,13 @@ public final class RemoteClient implements AutoCloseable {
         SSLContext tls = SSLContext.getInstance("TLS"); tls.init(keys.getKeyManagers(),new TrustManager[]{trust},new SecureRandom());
         SSLSocket s = (SSLSocket)tls.getSocketFactory().createSocket();
         synchronized(lock) { if (!current(token)) { s.close(); throw new IOException("Cancelled"); } socket = s; }
-        s.setSoTimeout(10000); s.connect(new InetSocketAddress(host,port),8000); s.startHandshake(); return s;
+        s.setKeepAlive(true);s.setTcpNoDelay(true);s.setSoTimeout(10000); s.connect(new InetSocketAddress(host,port),8000); s.startHandshake(); return s;
     }
     private void send(SSLSocket s,ProtoWire.Message message) throws IOException {
         synchronized (s) { ProtoWire.writeFrame(s.getOutputStream(),message.build()); }
     }
     private void closeSocket(int token) { synchronized(lock) { if (generation == token) { connected = false; awaitingCode = false; closeSocket(); } } }
-    private void closeSocket() { SSLSocket s = socket; socket = null; if (s != null) try { s.close(); } catch(IOException ignored) {} }
+    private void closeSocket() { SSLSocket s=socket;socket=null;SocketCloser.close(s); }
     private void loadIdentity() throws Exception {
         if (identity != null) return;
         File file = new File(context.getFilesDir(),"remote-identity.p12");

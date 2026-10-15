@@ -15,8 +15,6 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
-import android.view.inputmethod.InputMethodManager;
-import android.view.inputmethod.EditorInfo;
 import android.widget.*;
 import com.morluto.remocon.protocol.RemoteClient;
 import com.morluto.remocon.protocol.AppLaunch;
@@ -28,12 +26,20 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
     private boolean dark;
     private final ArrayList<View> controls = new ArrayList<>();
     private final LinkedHashMap<String,String> devices = new LinkedHashMap<>();
-    private RemoteClient remote;
+    private ConnectionService remote;
+    private boolean bound;
+    private final android.content.ServiceConnection serviceConnection=new android.content.ServiceConnection(){
+        public void onServiceConnected(android.content.ComponentName name,android.os.IBinder binder){
+            remote=((ConnectionService.LocalBinder)binder).getService();
+            if(started)attachConnection();
+        }
+        public void onServiceDisconnected(android.content.ComponentName name){remote=null;connected=false;busy=false;renderStatus("연결 서비스를 다시 준비하고 있어요.");}
+    };
     private DeviceDiscovery discovery;
     private SharedPreferences prefs;
     private TextView deviceName, status, badge;
     private Button connectButton;
-    private AlertDialog deviceDialog, pairingDialog, keyboardDialog;
+    private AlertDialog deviceDialog, pairingDialog;
     private LinearLayout deviceList;
     private String host = "", name = "Chromecast with Google TV";
     private String pairingError = "";
@@ -45,19 +51,23 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
         dark=prefs.getBoolean("dark",systemDark);applyPalette();
         super.onCreate(state);
         host = prefs.getString("host", ""); name = prefs.getString("name", name);
-        remote = new RemoteClient(getApplicationContext(), this);
         discovery = new DeviceDiscovery(this, this);
         buildUi();
+        bound=bindService(new android.content.Intent(this,ConnectionService.class),serviceConnection,BIND_AUTO_CREATE);
     }
-    @Override protected void onStart() { super.onStart(); started = true; if (!host.isEmpty() && remote.isPaired(host)) connectTo(host, name, false); }
+    private void attachConnection(){
+        if(remote.isMaintainingConnection()){host=remote.getHost();deviceName.setText(name);remote.attach(this);}
+        else if(!host.isEmpty()&&prefs.getBoolean("keep_connected",true)&&remote.isPaired(host)){remote.attach(this);connectTo(host,name,false);}
+        else remote.attach(this);
+    }
+    @Override protected void onStart() { super.onStart(); started = true; if(remote!=null)attachConnection(); }
     @Override protected void onStop() {
-        started = false; discovery.stop(); remote.disconnect(); connected = false; busy = false;
+        started = false; discovery.stop(); if(remote!=null)remote.detach(this);
         if (deviceDialog != null) deviceDialog.dismiss();
         if (pairingDialog != null) { pairingDialog.dismiss(); pairingDialog = null; }
-        if (keyboardDialog != null) { keyboardDialog.dismiss(); keyboardDialog = null; }
-        renderStatus("연결이 종료됐어요. 앱을 열면 다시 연결합니다."); super.onStop();
+        super.onStop();
     }
-    @Override protected void onDestroy() { remote.close(); super.onDestroy(); }
+    @Override protected void onDestroy() { if(remote!=null)remote.detach(this);if(bound)unbindService(serviceConnection);discovery.close();super.onDestroy(); }
     private void applyPalette(){
         setTheme(dark?com.morluto.remocon.R.style.AppTheme_Dark:com.morluto.remocon.R.style.AppTheme_Light);
         BG=Color.parseColor(dark?"#0C1424":"#F2F6FC");CARD=Color.parseColor(dark?"#15233B":"#FFFFFF");
@@ -114,10 +124,9 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
         status=fittedLabel(previousStatus,10,12,MUTED);details.addView(status,new LinearLayout.LayoutParams(-1,0,1.5f));
         card.addView(details,new LinearLayout.LayoutParams(0,-1,1));
         connectButton=button("기기 연결",true);connectButton.setAutoSizeTextTypeUniformWithConfiguration(10,14,1,android.util.TypedValue.COMPLEX_UNIT_SP);
-        LinearLayout.LayoutParams connectParams=new LinearLayout.LayoutParams(dp(88),-1);connectParams.leftMargin=dp(8);card.addView(connectButton,connectParams);connectButton.setOnClickListener(v->chooseDevice());section(root,card,16);
+        LinearLayout.LayoutParams connectParams=new LinearLayout.LayoutParams(dp(88),-1);connectParams.leftMargin=dp(8);card.addView(connectButton,connectParams);connectButton.setOnClickListener(v->connectionAction());section(root,card,16);
 
         LinearLayout apps=row();
-        Button keyboard=button("키보드",false);keyboard.setContentDescription("키보드 입력");controls.add(keyboard);keyboard.setOnClickListener(v->showKeyboard());addShortcut(apps,keyboard);
         addShortcut(apps,appButton("YouTube","YouTube 실행",com.morluto.remocon.R.drawable.ic_youtube,AppLaunch.YOUTUBE));
         addShortcut(apps,appButton("Netflix","Netflix 실행",com.morluto.remocon.R.drawable.ic_netflix,AppLaunch.NETFLIX));section(root,apps,9);
 
@@ -185,25 +194,18 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private void space(LinearLayout l,int n){l.addView(new View(this),new LinearLayout.LayoutParams(1,dp(n)));}
     private void setControls(boolean enable){for(View v:controls){v.setEnabled(enable);v.setAlpha(enable?1f:.5f);}}
-    private void renderStatus(String message){status.setText(message);badge.setText(connected?"●  연결됨":busy?"●  연결 중":"○  연결 대기");badge.setTextColor(connected?BLUE:MUTED);connectButton.setText(connected?"기기 변경":busy?"연결 취소":"기기 연결");setControls(connected);}
-    private void showKeyboard(){
-        if(!connected)return;
-        LinearLayout content=vertical();content.setPadding(dp(24),dp(8),dp(24),dp(8));
-        TextView hint=label("먼저 TV에서 검색창을 선택하세요. 입력한 검색어로 TV의 입력 내용을 바꿉니다.",14,MUTED);content.addView(hint);
-        EditText input=new EditText(this);input.setHint("검색어 입력");input.setTextColor(INK);input.setHintTextColor(MUTED);input.setSingleLine(true);input.setInputType(InputType.TYPE_CLASS_TEXT);input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(1000)});content.addView(input);
-        keyboardDialog=dialogBuilder().setTitle("TV 키보드 입력").setView(content).setPositiveButton("검색 / Enter",null).setNeutralButton("텍스트 전송",null).setNegativeButton("닫기",null).create();keyboardDialog.show();
-        View.OnClickListener search=v->{String text=input.getText().toString();if(text.trim().isEmpty()){input.setError("검색어를 입력해 주세요.");return;}if(remote.sendText(text,true)){keyboardDialog.dismiss();keyboardDialog=null;}else input.setError("TV에서 검색창을 선택하고 다시 시도하세요.");};
-        keyboardDialog.getButton(-1).setOnClickListener(search);
-        keyboardDialog.getButton(-3).setOnClickListener(v->{String text=input.getText().toString();if(text.trim().isEmpty()){input.setError("검색어를 입력해 주세요.");return;}if(remote.sendText(text,false)){keyboardDialog.dismiss();keyboardDialog=null;}else input.setError("TV에서 검색창을 선택하고 다시 시도하세요.");});
-        input.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_SEARCH){search.onClick(v);return true;}return false;});input.requestFocus();
-        keyboardDialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE|android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        input.postDelayed(()->{if(keyboardDialog!=null&&keyboardDialog.isShowing())((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(input,InputMethodManager.SHOW_IMPLICIT);},180);
+    private void renderStatus(String message){status.setText(message);badge.setText(connected?"●  연결됨":busy?"●  연결 중":"○  연결 대기");badge.setTextColor(connected?BLUE:MUTED);connectButton.setText(connected||busy?"연결 관리":"기기 연결");setControls(connected);}
+    private void connectionAction(){
+        if(remote==null){renderStatus("연결 기능을 준비하고 있어요. 잠시 후 다시 눌러 주세요.");return;}
+        if(remote.isMaintainingConnection())dialogBuilder().setTitle("연결 관리").setMessage("연결은 앱을 닫아도 유지합니다. 직접 해제하거나 다른 기기를 선택할 수 있어요.")
+            .setPositiveButton("연결 해제",(d,w)->remote.disconnect()).setNeutralButton("기기 변경",(d,w)->chooseDevice()).setNegativeButton("닫기",null).show();
+        else chooseDevice();
     }
     private void chooseDevice(){
         remote.disconnect(); connected=false;busy=false;renderStatus("기기를 선택해 주세요.");devices.clear();
         LinearLayout content=vertical();content.setPadding(dp(20),dp(12),dp(20),dp(12));
         content.addView(label("같은 Wi-Fi의 Google TV 기기를 검색합니다.",13,MUTED));space(content,12);
-        deviceList=vertical();content.addView(deviceList);deviceList.addView(label("검색 중… (최대 20초)",14,INK));
+        deviceList=vertical();content.addView(deviceList);deviceList.addView(label("같은 Wi-Fi의 기기를 검색 중…",14,INK));
         ScrollView deviceScroll=new ScrollView(this);deviceScroll.addView(content);
         deviceDialog=dialogBuilder().setTitle("Chromecast 연결").setView(deviceScroll).setPositiveButton("IP 직접 입력",(d,w)->manualHost()).setNegativeButton("닫기",null).create();
         deviceDialog.setOnDismissListener(d->discovery.stop());deviceDialog.show();discovery.start();
@@ -224,9 +226,14 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
     }
     static boolean validIp(String host){String[] pieces=host.split("\\.",-1);if(pieces.length!=4)return false;for(String s:pieces){if(!s.matches("[0-9]{1,3}")||Integer.parseInt(s)>255)return false;}return !host.equals("0.0.0.0")&&!host.equals("255.255.255.255");}
     private void connectTo(String address,String device,boolean pair){
+        if(remote==null)return;
+        if(android.os.Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},7);
         pairingError="";host=address;name=device;deviceName.setText(name);connected=false;busy=true;renderStatus("기기에 연결하고 있어요…");
         if(pair||!remote.isPaired(host))remote.beginPairing(host);else remote.connect(host);
     }
+    @Override public void onReconnecting(String message){runOnUiThread(()->{if(started){connected=false;busy=true;renderStatus(message);}});}
+    @Override public void onDisconnected(String message){runOnUiThread(()->{if(started){connected=false;busy=false;renderStatus(message);}});}
+    @Override public void onNotice(String message){runOnUiThread(()->{if(started)Toast.makeText(this,message,Toast.LENGTH_LONG).show();});}
     @Override public void onStatus(String message){runOnUiThread(()->{if(started){if(message.contains("코드가 맞지"))pairingError=message;renderStatus(message);}});}
     @Override public void onPairingRequired(){runOnUiThread(()->{
         if(!started)return;busy=true;renderStatus("TV 화면의 6자리 코드를 입력하세요.");
@@ -239,7 +246,7 @@ public final class MainActivity extends Activity implements RemoteClient.Listene
     });}
     private void cancelPairing(){remote.disconnect();busy=false;connected=false;renderStatus("페어링을 취소했어요.");pairingDialog=null;}
     @Override public void onConnected(){runOnUiThread(()->{if(!started)return;connected=true;busy=false;if(pairingDialog!=null){pairingDialog.dismiss();pairingDialog=null;}prefs.edit().putString("host",host).putString("name",name).apply();renderStatus(host+" · 리모컨을 사용할 수 있어요.");});}
-    @Override public void onError(String message){runOnUiThread(()->{if(!started)return;connected=false;busy=false;if(pairingDialog!=null){pairingDialog.dismiss();pairingDialog=null;}if(keyboardDialog!=null){keyboardDialog.dismiss();keyboardDialog=null;}renderStatus(message);if(!host.isEmpty())dialogBuilder().setTitle("연결을 확인해 주세요").setMessage(message+"\n\n같은 Wi-Fi인지, TV가 켜져 있는지 확인하세요. 페어링 정보가 바뀌었다면 다시 페어링해 주세요.").setPositiveButton("다시 연결",(d,w)->connectTo(host,name,false)).setNeutralButton("다시 페어링",(d,w)->connectTo(host,name,true)).setNegativeButton("닫기",null).show();});}
-    private void showHelp(){dialogBuilder().setTitle("리모콘 사용 안내").setMessage("1. 휴대폰과 Chromecast 4세대를 같은 Wi-Fi에 연결하세요.\n2. ‘기기 연결’에서 TV를 선택하세요.\n3. TV에 표시되는 6자리 코드를 입력하세요.\n\n검색되지 않으면 IP 직접 입력을 이용하세요. 게스트 Wi-Fi나 AP 격리가 켜진 네트워크에서는 연결되지 않을 수 있어요.\n\n볼륨과 전원은 Chromecast 및 TV의 HDMI-CEC 설정에 따라 동작합니다. 음성 입력과 TV 입력 전환은 이 버전에서 지원하지 않습니다.\n\n인증 정보는 이 휴대폰의 앱 저장소에만 보관합니다.").setPositiveButton("확인",null).show();}
+    @Override public void onError(String message){runOnUiThread(()->{if(!started)return;connected=false;busy=false;if(pairingDialog!=null){pairingDialog.dismiss();pairingDialog=null;}renderStatus(message);if(!host.isEmpty())dialogBuilder().setTitle("연결을 확인해 주세요").setMessage(message+"\n\n같은 Wi-Fi인지, TV가 켜져 있는지 확인하세요. 페어링 정보가 바뀌었다면 다시 페어링해 주세요.").setPositiveButton("다시 연결",(d,w)->connectTo(host,name,false)).setNeutralButton("다시 페어링",(d,w)->connectTo(host,name,true)).setNegativeButton("닫기",null).show();});}
+    private void showHelp(){dialogBuilder().setTitle("리모콘 사용 안내").setMessage("1. 휴대폰과 Chromecast 4세대를 같은 Wi-Fi에 연결하세요.\n2. ‘기기 연결’에서 TV를 선택하세요.\n3. TV에 표시되는 6자리 코드를 입력하세요.\n\n검색되지 않으면 IP 직접 입력을 이용하세요. 게스트 Wi-Fi나 AP 격리가 켜진 네트워크에서는 연결되지 않을 수 있어요.\n\n앱을 닫아도 연결을 유지하며, 연결 관리 또는 알림에서 해제할 수 있습니다. 네트워크가 끊기면 자동 재연결합니다.\n\n볼륨은 TV 키 입력 후 Chromecast 직접 제어를 시도합니다. 적외선 전용 또는 고정 볼륨 설정은 Google TV에서 변경해야 할 수 있습니다. 전원은 TV의 HDMI-CEC 설정에 따라 동작합니다. 음성 입력과 TV 입력 전환은 이 버전에서 지원하지 않습니다.\n\n인증 정보는 이 휴대폰의 앱 저장소에만 보관합니다.").setPositiveButton("확인",null).show();}
 }
 

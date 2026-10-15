@@ -14,6 +14,7 @@ import java.util.concurrent.*;
 public final class MockTv {
     private static X509Certificate serverCertificate;
     private static final java.util.Set<String> paired = ConcurrentHashMap.newKeySet();
+    private static final java.util.concurrent.atomic.AtomicBoolean dropped=new java.util.concurrent.atomic.AtomicBoolean();
     public static void main(String[] args) throws Exception {
         if(args.length < 2) throw new IllegalArgumentException("Usage: MockTv identity.p12 password [127.0.0.1]");
         KeyStore store = KeyStore.getInstance("PKCS12");
@@ -86,13 +87,29 @@ public final class MockTv {
         }
         send(s,new ProtoWire.Message().nested(1,new ProtoWire.Message().number(1,615).nested(2,new ProtoWire.Message().text(1,"Chromecast Mock").text(2,"Local Test"))));
         ProtoWire.Fields config = receive(s); check(config.has(1),"remote_configure");
-        check(config.nested(1).number(1)==615,"features 615 with IME and app links"); check(config.nested(1).nested(2).number(3)==1,"device unknown1");
-        send(s,new ProtoWire.Message().nested(2,new ProtoWire.Message().number(1,615)));
-        ProtoWire.Fields active = receive(s); check(active.has(2) && active.nested(2).number(1)==615,"remote_set_active");
+        check(config.nested(1).number(1)==611,"features 611 without IME"); check(config.nested(1).nested(2).number(3)==1,"device unknown1");
+        send(s,new ProtoWire.Message().nested(2,new ProtoWire.Message().number(1,611)));
+        ProtoWire.Fields active = receive(s); check(active.has(2) && active.nested(2).number(1)==611,"remote_set_active");
         send(s,new ProtoWire.Message().nested(20,new ProtoWire.Message().nested(1,new ProtoWire.Message().text(12,"mock.search"))));
         send(s,new ProtoWire.Message().nested(21,new ProtoWire.Message().number(1,17).number(2,42)));
         send(s,new ProtoWire.Message().nested(40,new ProtoWire.Message().number(1,1)));
         log("CONTROL_CONNECTED"); s.setSoTimeout(10000);
+        if(Boolean.getBoolean("remocon.slowPing")){
+            boolean dropThisConnection=dropped.compareAndSet(false,true);
+            long started=System.currentTimeMillis(),nextPing=started+30000;int id=100;
+            s.setSoTimeout(250);
+            for(;;){
+                long now=System.currentTimeMillis();
+                if(now>=nextPing){send(s,new ProtoWire.Message().nested(8,new ProtoWire.Message().number(1,id++)));nextPing=now+30000;}
+                if(dropThisConnection&&now-started>75000){log("TEST_FORCED_CONNECTION_CLOSE");return;}
+                try{
+                    ProtoWire.Fields message=receive(s);
+                    if(message.has(9))log("SLOW_PING_OK="+message.nested(9).number(1));
+                    if(message.has(10))log("KEY="+message.nested(10).number(1)+" DIRECTION="+message.nested(10).number(2));
+                    if(message.has(90))checkAppLink(s,message.nested(90));
+                }catch(java.net.SocketTimeoutException timeout){}
+            }
+        }
         int counter = 1;
         for(;;) {
             send(s,new ProtoWire.Message().nested(8,new ProtoWire.Message().number(1,counter).number(2,0)));

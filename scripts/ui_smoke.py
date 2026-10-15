@@ -4,12 +4,14 @@ Usage: python scripts/ui_smoke.py <adb path> pair|code|keys [six-hex-code]
 import re
 import subprocess
 import sys
+import os
 import time
 import xml.etree.ElementTree as ET
 
 ADB = sys.argv[1]
+DEVICE = os.environ.get("REMOCON_TEST_DEVICE", "emulator-5554")
 def adb(*args):
-    return subprocess.check_output([ADB, "-s", "emulator-5554", *args], timeout=15).decode("utf-8")
+    return subprocess.check_output([ADB, "-s", DEVICE, *args], timeout=15).decode("utf-8")
 def nodes():
     adb("shell", "uiautomator", "dump", "/sdcard/remocon-smoke.xml")
     return list(ET.fromstring(adb("shell", "cat", "/sdcard/remocon-smoke.xml")).iter("node"))
@@ -35,7 +37,9 @@ def clear_input():
 
 if sys.argv[2] == "pair":
     try: tap(text="기기 연결")
-    except AssertionError: tap(text="기기 변경")
+    except AssertionError:
+        tap(text="연결 관리")
+        tap(text="기기 변경")
     tap(text="IP 직접 입력")
     tap(cls="android.widget.EditText")
     clear_input()
@@ -63,14 +67,6 @@ elif sys.argv[2] == "keys":
     for desc in ["위", "왼쪽", "확인", "오른쪽", "아래", "뒤로", "홈", "재생 / 일시정지", "볼륨 줄이기", "음소거", "볼륨 높이기", "전원 전환"]:
         tap(desc=desc)
     print("TWELVE_KEYS_UI_OK")
-elif sys.argv[2] == "keyboard":
-    find(text="●  연결됨")
-    tap(desc="키보드 입력")
-    tap(cls="android.widget.EditText")
-    type_text("Chromecast")
-    tap(text="검색 / Enter")
-    find(text="●  연결됨")
-    print("KEYBOARD_SEARCH_UI_OK")
 elif sys.argv[2] == "apps":
     find(text="●  연결됨")
     tap(desc="YouTube 실행")
@@ -83,10 +79,11 @@ elif sys.argv[2] == "layout":
     assert not any(n.get("class")=="android.widget.ScrollView" or n.get("scrollable")=="true" for n in app_nodes),"Main screen must not scroll"
     content=next(n for n in app_nodes if n.get("resource-id")=="android:id/content")
     left,top,right,bottom=map(int,re.findall(r"\d+",content.get("bounds")))
-    controls=["사용 안내","다크 모드 설정","키보드 입력","YouTube 실행","Netflix 실행","위","아래","왼쪽","오른쪽","확인","뒤로","홈","재생 / 일시정지","볼륨 줄이기","음소거","볼륨 높이기","전원 전환"]
+    controls=["사용 안내","다크 모드 설정","YouTube 실행","Netflix 실행","위","아래","왼쪽","오른쪽","확인","뒤로","홈","재생 / 일시정지","볼륨 줄이기","음소거","볼륨 높이기","전원 전환"]
     for desc in controls:
         n=next(n for n in app_nodes if n.get("content-desc")==desc)
         x1,y1,x2,y2=map(int,re.findall(r"\d+",n.get("bounds")))
         assert left<=x1<x2<=right and top<=y1<y2<=bottom,(desc,n.get("bounds"),content.get("bounds"))
-    assert any(n.get("text") in ["기기 연결","기기 변경","연결 취소"] for n in app_nodes)
-    print("ALL_18_CONTROLS_VISIBLE_NO_SCROLL_OK")
+    assert not any(n.get("content-desc")=="키보드 입력" for n in app_nodes)
+    assert any(n.get("text") in ["기기 연결","연결 관리"] for n in app_nodes)
+    print("ALL_17_CONTROLS_VISIBLE_NO_SCROLL_OK")
